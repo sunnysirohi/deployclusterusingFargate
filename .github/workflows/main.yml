@@ -30,7 +30,7 @@ jobs:
           --fargate
 
     - name: Update kubeconfig
-      run: aws eks update-kubeconfig --name my-cluster1 --region ${{ secrets.AWS_DEFAULT_REGION }}
+      run: aws eks update-kubeconfig --name my-cluster1 --region ${{ secrets.AWS_REGION }}
 
     - name: Deploy NGINX App
       run: |
