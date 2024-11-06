@@ -1,0 +1,80 @@
+name: Deploy EKS with Fargate and NGINX App
+
+on:
+  workflow_dispatch
+
+jobs:
+  create-cluster:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+        aws-secret-access-key: ${{ secrets.SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Install eksctl
+      run: |
+        curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+        sudo mv /tmp/eksctl /usr/local/bin
+
+    - name: Create EKS Cluster
+      run: |
+        eksctl create cluster \
+          --name my-cluster \
+          --version 1.27 \
+          --fargate
+
+    - name: Update kubeconfig
+      run: aws eks update-kubeconfig --name my-cluster --region ${{ secrets.AWS_DEFAULT_REGION }}
+
+    - name: Deploy NGINX App
+      run: |
+        kubectl apply -f - <<EOF
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: fargate-apps
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: nginx-deployment
+          namespace: fargate-apps
+        spec:
+          replicas: 2
+          selector:
+            matchLabels:
+              app: nginx
+          template:
+            metadata:
+              labels:
+                app: nginx
+            spec:
+              containers:
+              - name: nginx
+                image: nginx:latest
+                ports:
+                - containerPort: 80
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: nginx-service
+          namespace: fargate-apps
+        spec:
+          selector:
+            app: nginx
+          ports:
+            - protocol: TCP
+              port: 80
+              targetPort: 80
+          type: LoadBalancer
+        EOF
+
+    - name: Verify Deployment
+      run: kubectl get all -n fargate-apps
